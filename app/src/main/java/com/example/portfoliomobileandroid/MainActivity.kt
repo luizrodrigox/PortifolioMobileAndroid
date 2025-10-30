@@ -9,12 +9,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -23,43 +20,49 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.room.Room
+import com.example.portfoliomobileandroid.data.ProjectRepository
+import com.example.portfoliomobileandroid.data.local.AppDatabase
+import com.example.portfoliomobileandroid.data.local.Project
+import com.example.portfoliomobileandroid.data.remote.RetrofitInstance
+import com.example.portfoliomobileandroid.ui.ProjectViewModel
+import com.example.portfoliomobileandroid.ui.screens.ProjectDetailScreen
+import com.example.portfoliomobileandroid.ui.screens.ProjectListScreen
 import com.example.portfoliomobileandroid.ui.theme.PortfolioMobileAndroidTheme
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var viewModelFactory: ViewModelProvider.Factory
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        val database = Room.databaseBuilder(
+            applicationContext,
+            AppDatabase::class.java,
+            "portfolio-db"
+        ).build()
+
+        val projectDao = database.projectDao()
+        val apiService = RetrofitInstance.api
+
+        val repository = ProjectRepository(apiService, projectDao)
+        viewModelFactory = ProjectViewModel.Factory(repository)
+
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             PortfolioMobileAndroidTheme {
-                AppNavigation()
+                AppNavigation(viewModelFactory)
             }
         }
     }
 }
-
-data class Project(
-    val id: Int,
-    val name: String,
-    val description: String,
-    val language: String
-)
-
-val projectList = listOf(
-    Project(1, "Portfólio Mobile", "Aplicativo de cartão de visitas digital.", "Kotlin"),
-    Project(2, "Sistema de Gerenciamento de Pousada", "Sistema criado para gerenciamento de uma pousada.", "Java"),
-    Project(3, "E-commerce", "Protótipo de loja virtual mobile.", "Kotlin"),
-    Project(4, "Clone Netflix", "Site de streaming para estudos.", "JavaScript"),
-    Project(5, "Gestor de Tarefas", "Aplicativo para organizar atividades diárias.", "C"),
-    Project(6, "Quiz Interativo", "Jogo de perguntas e respostas com pontuação.", "Python"),
-    Project(7, "App de Receitas", "Catálogo de receitas com imagens e ingredientes.", "JavaScript"),
-    Project(8, "Finanças Pessoais", "Controle de gastos com gráficos e relatórios.", "Swift"),
-    Project(9, "Agenda de Contatos", "Aplicativo CRUD de contatos com banco local.", "Kotlin"),
-    Project(10, "Clima Hoje", "Aplicativo de previsão do tempo com dados mockados.", "Java")
-)
 
 @Composable
 fun ProjectCard(project: Project, onClick: () -> Unit){
@@ -202,48 +205,9 @@ fun ProfileScreen(navController: NavHostController){
 }
 
 @Composable
-fun ProjectListScreen(navController: NavHostController){
-    LazyColumn(modifier = Modifier.padding(start = 15.dp, top = 40.dp, end = 15.dp)) {
-        items(projectList) { project ->
-            ProjectCard(project = project) {
-                navController.navigate("project_detail/${project.id}")
-            }
-        }
-    }
-}
-
-@Composable
-fun ProjectDetailScreen(projectId: Int){
-    val project = projectList.find { it.id == projectId }
-    Column(
-        modifier = Modifier.fillMaxSize().padding(top = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Detalhes do Projeto",
-            fontWeight = FontWeight.Bold,
-            fontSize = 22.sp
-        )
-
-        Spacer(modifier = Modifier.height(25.dp))
-
-        project?.let {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(start = 15.dp, end = 15.dp),
-                horizontalAlignment = Alignment.Start
-            ) {
-                Text(text = "ID: ${it.id}")
-                Text(text = "Nome: ${it.name}")
-                Text(text = "Descrição: ${it.description}")
-                Text(text = "Linguagem: ${it.language}")
-            }
-        }
-    }
-}
-
-@Composable
-fun AppNavigation(){
+fun AppNavigation(viewModelFactory: ViewModelProvider.Factory){
     val navController = rememberNavController()
+    val projectViewModel: ProjectViewModel = viewModel(factory = viewModelFactory)
 
     NavHost(navController = navController, startDestination = "profile"){
 
@@ -251,14 +215,20 @@ fun AppNavigation(){
             ProfileScreen(navController)
         }
         composable("project_list") {
-            ProjectListScreen(navController)
+            ProjectListScreen(navController, projectViewModel)
         }
         composable("project_detail/{projectId}"){
             backStackEntry ->
             val projectId = backStackEntry.arguments?.getString("projectId")?.toIntOrNull() ?: 0
-            ProjectDetailScreen(projectId)
+            ProjectDetailScreen(projectId, projectViewModel)
         }
 
+    }
+}
+
+val MockViewModelFactory = object : ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        throw IllegalStateException("A Factory REAL não deve ser usada em Previews.")
     }
 }
 
@@ -266,6 +236,6 @@ fun AppNavigation(){
 @Composable
 fun GreetingPreview() {
     PortfolioMobileAndroidTheme {
-        AppNavigation()
+        AppNavigation(MockViewModelFactory)
     }
 }
